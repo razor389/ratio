@@ -15,7 +15,8 @@ This repository should use an explicit split-runtime foundation aimed at long-te
 ```text
 ratio_backend/
   core/           # Python analysis config and logging
-  services/       # Python ingestion and LLM draft-generation workflows
+  ingestion/      # Python Outlook/forum source collection workflows
+  services/       # Python evidence-collection, LLM draft-generation, and sizing workflows
   integrations/   # Python provider-specific LLM clients
   domain/         # shared Python-side draft/data shapes
 
@@ -39,7 +40,8 @@ The current Python package name `ratio_backend` is legacy. In practice it should
 - Rust backend crates should not absorb provider-specific LLM orchestration unless there is a strong operational reason
 - the Python/Rust boundary should use structured draft artifacts and source-document payloads
 - Rust remains the owner of persistent state transitions, publication rules, and API contracts
-- top-level ingestion scripts should eventually become thin entry points into the Python analysis layer
+- ingestion entrypoints should live under the Python package rather than at repository top level
+- Python services should own the adapter step that converts raw ingestion output into `EvidenceItem` payloads for LLM drafting
 
 ## Logging
 
