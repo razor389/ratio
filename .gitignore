@@ -2,6 +2,7 @@
 *.pyc
 __pycache__/
 python/venv/
+.venv/
 
 # Beads database
 .beads/
@@ -14,3 +15,6 @@ target/
 .env
 .env.*
 !.env.example
+
+# Output
+output/

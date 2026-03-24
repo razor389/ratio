@@ -124,6 +124,8 @@ Collect all forum posts for a ticker:
 python -m ratio_backend.ingestion.forum_posts MSFT
 ```
 
+Only posts authored by `FORUM_AUTHOR_EMAIL` are included.
+
 This writes:
 
 - `output/MSFT_forum_posts.json`
@@ -146,6 +148,36 @@ Primary service entrypoints:
 
 - `ratio_backend.services.collect_evidence_for_ticker`
 - `ratio_backend.services.generate_assessment_draft_for_ticker`
+
+Command-line entrypoint:
+
+```bash
+python -m ratio_backend.services.pipeline MSFT
+```
+
+By default, a successful draft run also writes:
+
+- `output/MSFT_llm_analysis.json`
+
+Useful flags:
+
+- `--collect-only`
+- `--ignore-email`
+- `--ignore-forum`
+- `--lookback-years 5`
+- `--company-name "Microsoft"`
+- `--model <provider-specific-model>`
+
+Examples:
+
+```bash
+python -m ratio_backend.services.pipeline MSFT --collect-only
+python -m ratio_backend.services.pipeline MSFT --ignore-email
+python -m ratio_backend.services.pipeline MSFT --ignore-forum
+```
+
+If both `--ignore-email` and `--ignore-forum` are supplied, the command prints a message and exits without running anything.
+Use `--no-persist-artifacts` to skip writing the collected source files and LLM analysis artifact.
 
 Example:
 

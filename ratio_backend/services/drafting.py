@@ -66,15 +66,61 @@ def _document_sort_key(document: EvidenceItem) -> float:
 
 def _extract_json_object(raw_text: str) -> dict[str, Any]:
     """Extract and parse the first JSON object from an LLM response."""
+    candidates = [raw_text.strip()]
+
     fenced = re.search(r"```json\s*(\{.*?\})\s*```", raw_text, flags=re.DOTALL)
     if fenced:
-        return json.loads(fenced.group(1))
+        candidates.append(fenced.group(1))
 
-    direct = re.search(r"(\{.*\})", raw_text, flags=re.DOTALL)
-    if direct:
-        return json.loads(direct.group(1))
+    balanced = _extract_balanced_json_candidate(raw_text)
+    if balanced:
+        candidates.append(balanced)
 
+    last_error: Exception | None = None
+    for candidate in candidates:
+        if not candidate:
+            continue
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError as exc:
+            last_error = exc
+
+    if last_error is not None:
+        raise ValueError(f"Draft response JSON was invalid or truncated: {last_error}") from last_error
     raise ValueError("Draft response did not contain a JSON object")
+
+
+def _extract_balanced_json_candidate(raw_text: str) -> str | None:
+    """Return the first balanced top-level JSON object candidate from free-form text."""
+    start = raw_text.find("{")
+    if start == -1:
+        return None
+
+    depth = 0
+    in_string = False
+    escape = False
+    for index in range(start, len(raw_text)):
+        char = raw_text[index]
+
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return raw_text[start : index + 1]
+
+    return raw_text[start:].strip() or None
 
 
 def _build_factor_assessments(payload: dict[str, Any], settings: Settings) -> tuple[FactorScores, list[FactorAssessment]]:
@@ -218,6 +264,8 @@ def _build_system_prompt(settings: Settings) -> str:
         - If evidence is mixed, acknowledge the tension in the rationale and choose the most defensible single score.
         - Tie each rationale to concrete signals from the documents, not generic market commentary.
         - If there is not enough evidence for a factor, say that explicitly in the rationale or assumptions.
+        - Keep each factor rationale brief: 1-2 sentences and under 50 words when possible.
+        - Keep the assumptions list short and concrete.
         - Do not fabricate company facts that are not supported or reasonably inferred from the documents.
         - Do not return score ranges. Return one integer score per factor.
         - Put missing information, uncertainty, or inference gaps into `assumptions`.
@@ -274,7 +322,7 @@ async def generate_assessment_draft_async(
         user_prompt=user_prompt,
         model_name=model_name,
         temperature=0.2,
-        max_output_tokens=3000,
+        max_output_tokens=5000,
     )
     payload = _extract_json_object(raw_response)
     scores, factors = _build_factor_assessments(payload, active_settings)

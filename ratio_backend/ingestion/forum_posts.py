@@ -14,6 +14,7 @@ from ..core.config import get_settings
 load_dotenv()
 
 WEBSITETOOLBOX_API_KEY = os.getenv("WEBSITETOOLBOX_API_KEY")
+FORUM_AUTHOR_EMAIL = (os.getenv("FORUM_AUTHOR_EMAIL") or "").strip().lower()
 
 BASE_URL = "https://api.websitetoolbox.com/v1/api"
 
@@ -116,6 +117,13 @@ def _clean_html_to_text(html: str) -> str:
     return soup.get_text(separator=" ").strip()
 
 
+def _get_forum_author_email() -> str:
+    """Return the configured forum author email or raise if it is missing."""
+    if not FORUM_AUTHOR_EMAIL:
+        raise ValueError("FORUM_AUTHOR_EMAIL not found in .env file")
+    return FORUM_AUTHOR_EMAIL
+
+
 # ---------------------------
 # API wrappers
 # ---------------------------
@@ -174,6 +182,7 @@ def _get_output_dir() -> Path:
 
 def collect_forum_posts_for_ticker(input_ticker):
     """Collect and normalize all forum posts for the configured ticker category tree."""
+    forum_author_email = _get_forum_author_email()
     config = load_ticker_config()
     ticker = get_search_ticker(input_ticker, config)
 
@@ -224,12 +233,16 @@ def collect_forum_posts_for_ticker(input_ticker):
             print(f"  Topic '{topic_title}' (ID={topic_id}) -> {len(posts)} post(s).")
 
             for post in posts:
+                author_email = _extract_author_email(post).strip().lower()
+                if author_email != forum_author_email:
+                    continue
+
                 post_id = post.get("postId")
                 if post_id not in unique_posts:
                     unique_posts[post_id] = {
                         "timestamp": post.get("postTimestamp", 0),
                         "message": _clean_html_to_text(post.get("message", "")),
-                        "authorEmail": _extract_author_email(post).strip(),
+                        "authorEmail": author_email,
                         "postId": post_id,
                         "topicId": topic_id,
                         "topicTitle": topic_title,

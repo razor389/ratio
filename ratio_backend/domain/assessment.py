@@ -15,14 +15,18 @@ class FactorScores:
     market_definition_change: int
     relative_valuation: int
 
-    def validate(self, *, min_score: int = 0, max_score: int = 10) -> None:
-        """Ensure each score stays within the allowed range."""
-        for name, value in {
+    def as_dict(self) -> dict[str, int]:
+        """Return the factor scores as a stable dictionary."""
+        return {
             "debt": self.debt,
             "market_share_change": self.market_share_change,
             "market_definition_change": self.market_definition_change,
             "relative_valuation": self.relative_valuation,
-        }.items():
+        }
+
+    def validate(self, *, min_score: int = 0, max_score: int = 10) -> None:
+        """Ensure each score stays within the allowed range."""
+        for name, value in self.as_dict().items():
             if value < min_score or value > max_score:
                 raise ValueError(f"{name} must be between {min_score} and {max_score}, got {value}")
 
