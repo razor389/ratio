@@ -2,57 +2,67 @@
 
 ## Goals
 
-This repository now has an explicit backend foundation aimed at long-term maintenance:
+This repository should use an explicit split-runtime foundation aimed at long-term maintenance:
 
 - keep domain logic separate from scripts and vendor SDKs
-- centralize configuration and logging
+- keep Python focused on ingestion and provider-specific LLM analysis
+- keep Rust focused on the system-of-record backend concerns
+- centralize configuration and logging conventions across both runtimes
 - use a local database by default, while keeping the storage layer portable to managed Postgres later
-- support internal LLM-assisted draft scoring without leaking internal rationale to the public surface
 
 ## Proposed package layout
 
 ```text
 ratio_backend/
-  core/           # config and logging
-  domain/         # pure business models
-  db/             # SQLAlchemy models, sessions, repositories
-  services/       # sizing, draft generation, publishing workflows
-  integrations/   # external providers such as LLM SDKs
+  core/           # Python analysis config and logging
+  services/       # Python ingestion and LLM draft-generation workflows
+  integrations/   # Python provider-specific LLM clients
+  domain/         # shared Python-side draft/data shapes
+
+apps/
+  ratio-backend/  # Rust API/backend binary entrypoint
+crates/
+  ratio-config/   # Rust config and logging bootstrap
+  ratio-domain/   # Rust domain models
+  ratio-storage/  # Rust local DB layer and migrations
+
 docs/             # product spec, sizing logic, architecture notes
 data/             # local SQLite database file location
 output/           # generated artifacts from ingestion and analysis scripts
 ```
 
+The current Python package name `ratio_backend` is legacy. In practice it should be treated as the Python analysis layer until it is renamed more explicitly.
+
 ## Layering rules
 
-- `domain` must not import SQLAlchemy, SDK clients, or file-system workflows
-- `services` orchestrate business logic and call repositories or integrations
-- `db` owns persistence details and can switch from SQLite to Postgres through `DATABASE_URL`
-- `integrations` isolate vendor-specific code so model/provider swaps do not ripple upward
-- top-level ingestion scripts should eventually become thin entry points that call `ratio_backend`
+- Python analysis modules should not become the primary database or API layer
+- Rust backend crates should not absorb provider-specific LLM orchestration unless there is a strong operational reason
+- the Python/Rust boundary should use structured draft artifacts and source-document payloads
+- Rust remains the owner of persistent state transitions, publication rules, and API contracts
+- top-level ingestion scripts should eventually become thin entry points into the Python analysis layer
 
 ## Logging
 
-Logging is configured centrally in `ratio_backend.core.logging`.
+Logging should be coordinated, not duplicated.
 
-- default format is structured JSON for machine parsing
-- a plain-text mode is available with `LOG_FORMAT=text`
-- request context support is included now so future APIs and job runners can stamp `request_id`
-- modules should use `get_logger(__name__)` instead of `print`
+- Python should use `python-json-logger`
+- Rust should use `tracing` plus `tracing-subscriber`
+- both should follow the field vocabulary in [logging_contract.md](/mnt/c/Users/Ross/projects/ratio/docs/logging_contract.md)
+- JSON should be the default format in both runtimes
 
 ## Database strategy
 
-The initial default is local SQLite:
+The initial default is local SQLite owned by Rust:
 
-- default URL: `sqlite:///data/ratio.db`
-- tables are created automatically during backend bootstrap
-- SQLAlchemy repositories isolate persistence behavior from the service layer
+- default URL: `sqlite://data/ratio.db`
+- Rust owns database access and schema evolution
+- Python should not be treated as a peer database backend
 
 This keeps local development simple while leaving an easy migration seam:
 
-- swap `DATABASE_URL` to Postgres when moving to cloud
-- keep repository interfaces stable
-- add migrations later without restructuring the application layers
+- swap the Rust storage layer to Postgres when cloud requirements justify it
+- keep Rust domain and service interfaces stable
+- keep Python focused on artifact generation regardless of the eventual database choice
 
 ## Initial schema scope
 
@@ -69,25 +79,26 @@ The current schema follows the spec more closely and is still backend-first:
 
 This supports the core internal workflow:
 
-1. ingest source documents
-2. generate an internal LLM first-pass draft with factor scores and rationale
-3. review and edit scores, notes, and public comment
-4. publish atomically while archiving the previous published version
+1. Python collects source material and generates first-pass draft analysis
+2. Rust ingests those artifacts and persists source documents and assessments
+3. PM reviews and edits scores, notes, and public comment
+4. Rust publishes atomically while archiving the previous published version
 
 ## LLM draft workflow
 
-The imported summarization code was not kept as a compatibility layer. Instead, the reusable provider integration pattern now feeds a draft-generation service that returns:
+The Python LLM layer should return structured draft artifacts rather than prose summaries. Those artifacts should contain:
 
 - four factor scores
 - internal factor rationales
 - assumptions
-- calculated aggregate score and suggested position size
+- provider/model/prompt metadata
+- optional calculated aggregate score and suggested position size
 
-That matches the intended use case in `docs/spec.md` and `docs/sizing_logic.md`.
+That matches the intended use case in [spec.md](/mnt/c/Users/Ross/projects/ratio/docs/spec.md) and [sizing_logic.md](/mnt/c/Users/Ross/projects/ratio/docs/sizing_logic.md).
 
 ## Near-term next steps
 
-1. Move the Outlook and forum ingestion scripts behind `ratio_backend.integrations` and `services`
-2. Add migration tooling once the schema stabilizes
-3. Add tests around sizing rules, draft parsing, repository behavior, and publication workflow
-4. Add public/admin API layers only after the domain and persistence contracts settle
+1. Keep Outlook/forum extraction and LLM calls in Python, but narrow them to artifact generation
+2. Remove Python database ownership assumptions from the codebase
+3. Add a concrete artifact handoff contract from Python to Rust
+4. Add Rust API/persistence tests around validation, versioning, and publish transactions

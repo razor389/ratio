@@ -1,0 +1,13 @@
+[package]
+name = "ratio-backend"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+axum.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+ratio-config = { path = "../../crates/ratio-config" }
+ratio-storage = { path = "../../crates/ratio-storage" }

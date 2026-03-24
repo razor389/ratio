@@ -1,4 +1,4 @@
-"""Centralized environment-driven configuration for backend services."""
+"""Centralized environment-driven configuration for Python analysis services."""
 
 from __future__ import annotations
 
@@ -13,7 +13,6 @@ load_dotenv()
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DATA_DIR = PROJECT_ROOT / "data"
-DEFAULT_SQLITE_PATH = DEFAULT_DATA_DIR / "ratio.db"
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
@@ -22,22 +21,15 @@ def _env_flag(name: str, default: bool = False) -> bool:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
-
-def _default_database_url() -> str:
-    return os.getenv("DATABASE_URL", f"sqlite:///{DEFAULT_SQLITE_PATH.as_posix()}")
-
-
 @dataclass(frozen=True, slots=True)
 class Settings:
-    """Typed settings object shared across backend modules."""
+    """Typed settings object shared across Python analysis modules."""
 
     app_name: str
     environment: str
     debug: bool
     log_level: str
     log_format: str
-    database_url: str
-    sql_echo: bool
     data_dir: Path
     output_dir: Path
     base_position_size: float
@@ -57,13 +49,11 @@ def get_settings() -> Settings:
     max_position = os.getenv("MAX_POSITION_SIZE")
 
     return Settings(
-        app_name=os.getenv("APP_NAME", "ratio-backend"),
+        app_name=os.getenv("APP_NAME", "ratio-analysis"),
         environment=os.getenv("APP_ENV", "development"),
         debug=_env_flag("DEBUG"),
         log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
         log_format=os.getenv("LOG_FORMAT", "json").lower(),
-        database_url=_default_database_url(),
-        sql_echo=_env_flag("SQL_ECHO"),
         data_dir=data_dir,
         output_dir=output_dir,
         base_position_size=float(os.getenv("BASE_POSITION_SIZE", "0.05")),

@@ -10,3 +10,4 @@ python/venv/
 repomix-output.xml
 AGENTS.md
 .gitattributes
+target/

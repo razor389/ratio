@@ -1,4 +1,4 @@
-"""Source-document domain types reserved for admin-only backend workflows."""
+"""Source-document types used by the Python ingestion and analysis layer."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from enum import Enum
 
 
 class EvidenceSourceType(str, Enum):
-    """Supported evidence origins for future ingestion pipelines."""
+    """Supported evidence origins for ingestion and draft analysis."""
 
     OUTLOOK_EMAIL = "outlook_email"
     FORUM_POST = "forum_post"
@@ -18,7 +18,7 @@ class EvidenceSourceType(str, Enum):
 
 @dataclass(slots=True)
 class EvidenceItem:
-    """Admin-only source document linked to a company or assessment."""
+    """Source document payload consumed by Python draft analysis."""
 
     company_id: int
     source_type: EvidenceSourceType

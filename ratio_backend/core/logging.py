@@ -1,4 +1,4 @@
-"""Structured logging helpers shared by scripts and future services."""
+"""Structured logging helpers shared by Python analysis scripts and services."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from pythonjsonlogger.jsonlogger import JsonFormatter
 from .config import Settings, get_settings
 
 _request_id: ContextVar[str] = ContextVar("ratio_request_id", default="-")
+_run_id: ContextVar[str] = ContextVar("ratio_run_id", default="-")
 _configured = False
 
 
@@ -21,9 +22,12 @@ class RequestContextFilter(logging.Filter):
         self.settings = settings
 
     def filter(self, record: logging.LogRecord) -> bool:
-        record.app_name = self.settings.app_name
+        record.service = self.settings.app_name
+        record.runtime = "python"
         record.environment = self.settings.environment
+        record.component = getattr(record, "component", "analysis")
         record.request_id = _request_id.get()
+        record.run_id = _run_id.get()
         return True
 
 
@@ -46,6 +50,16 @@ def clear_request_context() -> None:
     _request_id.set("-")
 
 
+def bind_run_context(run_id: str) -> None:
+    """Bind a job or batch run identifier to the current execution context."""
+    _run_id.set(run_id)
+
+
+def clear_run_context() -> None:
+    """Clear any job or batch run identifier from the current execution context."""
+    _run_id.set("-")
+
+
 def configure_logging(settings: Settings | None = None) -> None:
     """Configure process-wide logging exactly once."""
     global _configured
@@ -61,13 +75,13 @@ def configure_logging(settings: Settings | None = None) -> None:
     if active_settings.log_format == "json":
         handler.setFormatter(
             JsonFormatter(
-                "%(asctime)s %(levelname)s %(name)s %(message)s %(app_name)s %(environment)s %(request_id)s"
+                "%(asctime)s %(levelname)s %(name)s %(message)s %(service)s %(runtime)s %(environment)s %(component)s %(request_id)s %(run_id)s"
             )
         )
     else:
         handler.setFormatter(
             PlainTextFormatter(
-                "%(asctime)s %(levelname)s [%(name)s] [req=%(request_id)s] %(message)s"
+                "%(asctime)s %(levelname)s [%(name)s] [runtime=%(runtime)s] [component=%(component)s] [req=%(request_id)s] [run=%(run_id)s] %(message)s"
             )
         )
 

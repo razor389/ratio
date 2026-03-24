@@ -12,6 +12,15 @@ PM manages the underlying data through an authenticated admin UI backed by a ser
 
 The sizing methodology itself is defined in [sizing_logic.md](/mnt/c/Users/Ross/projects/ratio/docs/sizing_logic.md). This spec treats that document as the source of truth for calculation rules.
 
+### 1.1 Implementation split
+
+The v1 system is intentionally split by runtime:
+
+* Python is responsible for collecting Outlook emails, collecting forum posts, and generating LLM first-pass analysis artifacts
+* Rust is responsible for database interaction, admin/public API behavior, auth, publication workflows, and durable auditable state
+* Python analysis code should not become the primary database or API layer
+* Rust should not own provider-specific LLM prompt/orchestration logic in v1 unless there is a clear operational reason to move it
+
 ---
 
 ## 2. Fixed product rules
@@ -28,6 +37,8 @@ These are non-negotiable v1 requirements:
 * all admin reads and writes go through an authorized backend; the browser must never have direct database access
 * each company has at most one current published assessment
 * historical versions must be retained for admin use
+* Rust is the system of record for database writes and API responses
+* Python ingestion and analysis flows must hand off structured artifacts to Rust rather than becoming an alternate backend
 
 ---
 
@@ -74,6 +85,25 @@ The system should have two clearly separated surfaces, whether or not they share
 * admin app: authenticated surface for review, editing, publishing, and internal evidence
 
 Routing, permissions, and API access must keep those surfaces separate.
+
+### 3.4 Runtime responsibility boundary
+
+The system should be organized into two internal runtime layers:
+
+* Python analysis layer:
+  * Outlook/email extraction
+  * forum post extraction
+  * prompt assembly
+  * provider-specific LLM calls
+  * normalized draft-analysis artifacts containing scores, rationale, assumptions, and source references
+* Rust backend layer:
+  * source document ingestion into the local database
+  * assessment persistence and versioning
+  * publication transactions
+  * public and admin API endpoints
+  * authentication, authorization, and audit logging
+
+The handoff between those layers should use explicit, structured payloads rather than ad hoc text blobs.
 
 ---
 
@@ -237,6 +267,20 @@ For each company, the normal workflow is:
 
 This lifecycle is intentionally human-in-the-loop. LLM output can assist with drafting, but only PM-approved values become public.
 
+### 7.1 Draft artifact boundary
+
+The Python analysis layer should generate machine-readable draft artifacts that Rust can ingest or reconcile. Those artifacts should include:
+
+* company identity
+* source document identifiers or external references
+* factor scores
+* factor rationale
+* assumptions or uncertainty notes
+* LLM provider, model, and prompt version metadata
+* calculated outputs when useful for review
+
+Rust should validate and persist those artifacts before they influence admin or public state.
+
 ---
 
 ## 8. Calculation rules
@@ -250,6 +294,14 @@ The detailed sizing method lives in [sizing_logic.md](/mnt/c/Users/Ross/projects
 * precision should be preserved internally and rounded only for display
 
 Any additional safeguards such as beta floors or position caps should be implemented consistently with the sizing reference.
+
+### 8.1 Runtime ownership of calculation and draft logic
+
+For v1:
+
+* Python may compute first-pass draft calculations as part of LLM-assisted analysis
+* Rust should also own authoritative sizing and validation logic for persisted assessments and publication checks
+* if Python and Rust both compute sizing values, they must use the same documented formula and version labels
 
 ---
 
@@ -455,6 +507,8 @@ Optional internal workflow endpoints later:
 * `POST /api/admin/companies/:ticker/run-ingestion`
 * `POST /api/admin/companies/:ticker/run-llm-draft`
 
+Those internal workflow endpoints may invoke or coordinate Python analysis jobs, but the API contract and persisted state remain Rust-owned.
+
 ---
 
 ## 11. Auth, backend, and transaction requirements
@@ -482,6 +536,8 @@ The backend service should:
 * manage versioning and publish transitions
 * optionally host calculation logic directly
 
+In this project, "backend service" refers to the Rust service layer, not the Python analysis jobs.
+
 ### 11.3 Publish transaction behavior
 
 Publishing a draft should be an atomic transaction:
@@ -494,6 +550,21 @@ Publishing a draft should be an atomic transaction:
 6. record audit and publish events
 
 This guarantees that only one published assessment exists at a time.
+
+### 11.4 Logging and observability
+
+Python and Rust should share one observability model even though they serve different roles.
+
+Requirements:
+
+* both runtimes should emit structured logs by default
+* both runtimes should include service name, runtime, environment, and component in each log event or enclosing log context
+* request-oriented Rust logs should include `request_id` when applicable
+* batch or job-oriented Python logs should include `run_id` or equivalent job correlation
+* LLM-related logs should include provider/model metadata when available
+* company/ticker context should be attached when processing is company-specific
+
+The goal is to make one analysis run or one API request traceable across both runtimes without inventing separate logging conventions.
 
 ---
 
