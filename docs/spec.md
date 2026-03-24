@@ -1,316 +1,261 @@
-## Ratio (Spec.md v1)
+## Ratio Project Spec
 
 ### 1. Product summary
 
-Build a **public, read-only web dashboard** for clients that displays a curated set of portfolio companies, with for each company:
+Build a public, read-only dashboard that shows a curated set of portfolio companies. For each published company, clients can see:
 
 * final factor scores
 * final sizing output
-* an optional admin-enabled comment containing the final human-approved rationale
+* an optional final comment that PM explicitly enables for public display
 
-Scott will manage the underlying data through an **authenticated admin UI**. His workflow will update a cloud-hosted database using existing extraction pipelines, LLM-assisted drafting, and manual review. Clients will not see raw source material, draft outputs, or internal citations.
+PM manages the underlying data through an authenticated admin UI backed by a server-side API. Internal ingestion scripts, source documents, LLM drafts, and review history support that workflow, but none of that internal material is exposed publicly.
 
----
-
-## 2. Final product rules
-
-These are now fixed requirements:
-
-* **Clients see no raw emails or forum posts**
-* **Clients see only final published values**
-* **Clients may see an optional comment/rationale only if Scott enables it**
-* **Only final human-approved reasoning appears externally**
-* **All clients see the same company set**
-* **No authentication is required for client viewing**
-* **Records are updated ad hoc**
-* **Scott needs an admin UI**
-* **Admin interaction with the database must be authorized**
-* **There is only one current published assessment per company**
-* **Historical versions must be retained for Scott/admin use**
-
-This substantially simplifies the client-facing app and makes the main complexity live in the admin and publishing workflow.
+The sizing methodology itself is defined in [sizing_logic.md](/mnt/c/Users/Ross/projects/ratio/docs/sizing_logic.md). This spec treats that document as the source of truth for calculation rules.
 
 ---
 
-## 3. Product goals
+## 2. Fixed product rules
 
-### Client-facing goals
+These are non-negotiable v1 requirements:
 
-Provide a clean, low-friction dashboard that lets any visitor:
-
-* browse the current published company set
-* understand the current factor scores
-* see the current sizing output
-* optionally read a concise final comment when enabled
-
-### Admin goals
-
-Provide Scott with a secure admin experience that lets him:
-
-* manage which companies appear publicly
-* review internal source material and internal citations
-* run or import first-pass analyses
-* edit factor values manually
-* approve final comments
-* publish the current assessment
-* track historical versions over time
+* the public app is read-only and requires no login
+* all public viewers see the same published company set
+* clients see only final published values
+* clients never see raw emails, forum posts, citations, drafts, internal notes, or LLM outputs
+* the only narrative text that may appear publicly is an optional final comment approved by PM
+* records are updated ad hoc, so public pages must show a last updated or as-of date
+* PM needs an authenticated admin UI
+* all admin reads and writes go through an authorized backend; the browser must never have direct database access
+* each company has at most one current published assessment
+* historical versions must be retained for admin use
 
 ---
 
-## 4. User types
+## 3. Users and app surfaces
 
-### 4.1 Public client viewer
+### 3.1 Public viewer
 
 Unauthenticated, read-only.
 
 Can:
 
-* view dashboard
+* view the public dashboard
 * view company detail pages
-* see published factor scores and sizing
-* see optional published comment if enabled
+* view published factor scores and sizing output
+* view the optional published comment when enabled
+* view the public methodology page
 
 Cannot:
 
-* view raw sources
-* view internal notes
-* view drafts
-* edit anything
-* trigger analysis
+* view raw sources or internal evidence
+* view draft assessments or version history
+* view internal reasoning or LLM-generated content
+* edit data or trigger analysis
 
-### 4.2 Scott/admin
+### 3.2 PM/admin
 
 Authenticated.
 
 Can:
 
-* sign into admin UI
-* manage company visibility
-* inspect internal source evidence
-* view email/forum support material
-* view internal citations and LLM draft outputs
-* edit factors and final comments
-* publish/unpublish companies
-* review version history
+* sign into the admin UI
+* manage which companies appear publicly
+* review internal source material and evidence links
+* inspect draft and published assessments
+* edit factor scores and final comments
+* publish and unpublish companies
+* review historical versions and audit history
+
+### 3.3 Application structure
+
+The system should have two clearly separated surfaces, whether or not they share the same backend:
+
+* public app: serves published, read-only content
+* admin app: authenticated surface for review, editing, publishing, and internal evidence
+
+Routing, permissions, and API access must keep those surfaces separate.
 
 ---
 
-## 5. Core product structure
+## 4. Public product requirements
 
-The system should have **two distinct applications or two clearly separated app surfaces**:
+### 4.1 Dashboard
 
-### A. Public app
-
-Read-only, no login required.
-
-Purpose:
-
-* present current published assessments only
-
-### B. Admin app
-
-Authenticated.
-
-Purpose:
-
-* manage ingestion results
-* review evidence
-* create and edit assessments
-* publish final approved records
-
-Even if both are served from the same backend, they should be logically and permission-wise separate.
-
----
-
-## 6. Public-facing functionality
-
-## 6.1 Public dashboard
-
-The main page should show the currently published company set.
-
-For each company:
+The main page shows the current published company set. For each company, display:
 
 * company name
 * ticker
 * factor scores
-* total/aggregate score if used
+* aggregate score if the product chooses to show it
 * current sizing output
-* last updated or “as of” date
-* optional visible comment indicator
+* last updated or as-of date
+* whether a public comment is available
 
-Features:
+Expected capabilities:
 
 * search by company name or ticker
-* sort by ticker, score, sizing, update date
-* simple filtering if useful later
+* sort by ticker, score, sizing, and update date
+* optional filtering later if it becomes useful
 
-Because there is no login and all users see the same content, this page can be heavily cacheable.
+Because there is no login and all viewers see the same content, this page should be aggressively cacheable.
 
-## 6.2 Company detail page
+### 4.2 Company detail page
 
-Each company page should show:
+Each public company page should show:
 
 * company name and ticker
 * final published factor scores
 * sizing output
 * optional final published comment
-* last published date
-* methodology/version label
+* last published or as-of date
+* methodology or calculation version label
 
-It should **not** show:
+It must not show:
 
 * raw evidence
 * citations
-* internal rationale chain
-* LLM involvement
+* internal rationale chains
 * draft history
+* LLM involvement
 
-## 6.3 Methodology page
+### 4.3 Methodology page
 
-A public page should explain:
+Provide a public explanation of:
 
 * the factor framework at a high level
-* how scores relate to sizing
-* that assessments are human-reviewed and published
-* that updates occur on an ad hoc basis
+* how scores map to sizing
+* the fact that assessments are human-reviewed before publication
+* the ad hoc update cadence
 
-It should avoid exposing internal workflow details that are irrelevant to clients.
+This page should explain the method without exposing internal workflow detail that clients do not need.
 
 ---
 
-## 7. Admin functionality
+## 5. Admin product requirements
 
-## 7.1 Admin dashboard
+### 5.1 Admin dashboard
 
-Main internal landing page for Scott.
-
-Should show:
+The main internal landing page should show:
 
 * all tracked companies
 * publication status
-* current draft vs published state
+* current draft versus published state
 * last updated timestamp
-* whether optional comment is enabled
-* quick access to edit/publish/history
+* whether the public comment is enabled
+* quick actions for edit, publish, history, and evidence
 
-## 7.2 Company assessment editor
+### 5.2 Company assessment editor
 
-For a selected company, Scott should be able to:
+For a selected company, PM should be able to:
 
-* view current published assessment
-* view current draft assessment
+* view the current published assessment
+* view or create the current draft assessment
 * edit factor values
-* edit sizing-related fields if needed or let them auto-calculate
-* edit final public comment
-* toggle whether the comment is shown publicly
-* save draft
-* publish current version
+* edit sizing-related inputs if the product allows manual overrides, otherwise recalculate automatically
+* edit the final public comment
+* toggle whether that comment is visible publicly
+* save drafts
+* publish the current draft
 
-## 7.3 Internal evidence view
+### 5.3 Internal evidence view
 
-Admin-only page/panel showing supporting source material:
+Admin-only evidence pages or panels should expose:
 
 * Outlook-derived items
 * forum-derived items
-* internal citations/evidence links
-* timestamps
-* source type
-* any LLM first-pass output
+* internal evidence links and citations
+* timestamps and source type
+* LLM first-pass output when available
+* internal notes
 
-This is only for Scott/admin use.
+### 5.4 Version history and auditability
 
-## 7.4 Version history
+PM should be able to:
 
-Scott should be able to:
-
-* see all historical versions for a company
+* see all historical assessment versions for a company
 * compare versions
 * inspect who changed what and when
 * restore an earlier version into a new draft if needed
 
-Important: there is only one live published assessment per company, but many historical saved versions.
+### 5.5 Company visibility management
 
-## 7.5 Company visibility management
+PM should be able to:
 
-Scott should be able to:
-
-* add/remove companies from the public dashboard
-* mark companies as draft-only, published, or hidden
+* add or remove companies from the public dashboard
+* keep a company draft-only, published, or hidden
 * reorder display if needed
 
-Because all clients see the same set, this is much simpler than per-client entitlements.
+Because all clients see the same company set, there is no per-client entitlement model in v1.
 
 ---
 
-## 8. Updated source-data policy
+## 6. Publication and visibility model
 
-### Public-facing
+### 6.1 Publicly visible data
 
-Never shown:
-
-* raw emails
-* raw forum posts
-* internal citations
-* LLM output
-* source snippets
-
-### Admin-facing only
-
-Visible to Scott:
-
-* extracted forum posts
-* extracted emails
-* internal evidence associations
-* LLM first-pass scores and rationale
-* internal notes
-
-### Published content
-
-Only these fields may appear publicly:
+Only these fields may appear in the public app or public API:
 
 * company identity
 * final factor scores
 * final sizing output
-* optional final comment approved by Scott
-* published timestamp / as-of date
+* optional final public comment approved by PM
+* published timestamp or as-of date
+* methodology or calculation version label
 
-This keeps the public app very clean and sharply reduces privacy risk.
+### 6.2 Admin-only data
 
----
+The following remain internal:
 
-## 9. Assessment lifecycle
+* extracted emails
+* extracted forum posts
+* source snippets and evidence associations
+* LLM draft scores and rationale
+* internal notes
+* factor-level internal rationale
+* intermediate calculation values unless the admin UI explicitly needs them
 
-For each company, the lifecycle should be:
+### 6.3 Publication rules
 
-1. **Ingest**
-
-   * internal scripts pull forum posts and email records
-2. **Draft**
-
-   * system creates or updates a draft assessment
-3. **Review**
-
-   * Scott reviews source evidence and draft values
-4. **Edit**
-
-   * Scott manually adjusts scores/comment
-5. **Publish**
-
-   * draft becomes the one current published assessment
-6. **Archive**
-
-   * prior published version remains in version history
-
-At any moment:
-
-* one company can have multiple drafts/history records
-* one company can have only one current published assessment
+* one company may have many historical assessments
+* one company may have zero or one active draft
+* one company may have at most one published assessment
+* publishing must replace the current published assessment atomically
+* previously published versions are archived, not deleted
 
 ---
 
-## 10. Data model
+## 7. Assessment lifecycle
 
-## 10.1 companies
+For each company, the normal workflow is:
+
+1. ingest source material through internal scripts
+2. create or refresh a draft assessment
+3. review source evidence and draft output
+4. edit scores and the final comment
+5. publish the approved draft
+6. archive the previously published version in history
+
+This lifecycle is intentionally human-in-the-loop. LLM output can assist with drafting, but only PM-approved values become public.
+
+---
+
+## 8. Calculation rules
+
+The detailed sizing method lives in [sizing_logic.md](/mnt/c/Users/Ross/projects/ratio/docs/sizing_logic.md). In this spec, the implementation requirements are:
+
+* factor scoring and sizing calculations must follow that document exactly
+* public surfaces show final factor scores and final sizing output, not intermediate math unless intentionally exposed
+* admin surfaces may show calculation details, normalized values, or debug information if helpful for review
+* calculation versioning should be tracked so published assessments can be tied to the logic used at the time
+* precision should be preserved internally and rounded only for display
+
+Any additional safeguards such as beta floors or position caps should be implemented consistently with the sizing reference.
+
+---
+
+## 9. Data model
+
+### 9.1 `companies`
 
 Fields:
 
@@ -327,9 +272,9 @@ Fields:
 * `created_at`
 * `updated_at`
 
-## 10.2 source_documents
+### 9.2 `source_documents`
 
-Admin/internal only.
+Admin-only raw source records.
 
 Fields:
 
@@ -345,9 +290,9 @@ Fields:
 * `source_metadata_json`
 * `content_hash`
 
-## 10.3 assessments
+### 9.3 `assessments`
 
-Represents versioned assessments, both draft and published.
+Versioned assessments across draft, published, and archived states.
 
 Fields:
 
@@ -374,9 +319,11 @@ Fields:
 * `beta_like_score`
 * `suggested_position_size`
 
-Only one row per company may have `status = published` at a time.
+Constraint:
 
-## 10.4 assessment_factors
+* only one row per company may have `status = published`
+
+### 9.4 `assessment_factors`
 
 Fields:
 
@@ -391,11 +338,11 @@ Fields:
 * `public_rationale_override` nullable
 * `sort_order`
 
-For public display, you may not need factor-level rationale at all unless you later decide to expose it. Since the requirement is for a single optional comment, most rationale can remain internal.
+In v1, factor-level rationale can remain internal even if the public app later chooses to expose more detail.
 
-## 10.5 assessment_evidence_links
+### 9.5 `assessment_evidence_links`
 
-Admin/internal only.
+Admin-only evidence associations.
 
 Fields:
 
@@ -408,7 +355,7 @@ Fields:
 * `used_by_llm`
 * `used_in_final_review`
 
-## 10.6 admin_users
+### 9.6 `admin_users`
 
 Fields:
 
@@ -421,7 +368,7 @@ Fields:
 * `created_at`
 * `last_login_at`
 
-## 10.7 audit_events
+### 9.7 `audit_events`
 
 Fields:
 
@@ -434,9 +381,9 @@ Fields:
 * `after_json`
 * `created_at`
 
-## 10.8 publish_events
+### 9.8 `publish_events`
 
-Optional but useful.
+Optional but useful for a clear publication trail.
 
 Fields:
 
@@ -449,49 +396,39 @@ Fields:
 
 ---
 
-## 11. Public API spec
+## 10. API surface
 
-The public API should be read-only and expose only published content.
+### 10.1 Public API
 
-### Endpoints
+The public API is read-only and returns published content only.
 
-#### `GET /api/public/companies`
+Endpoints:
 
-Returns all published companies.
+* `GET /api/public/companies`
+* `GET /api/public/companies/:ticker`
+* `GET /api/public/methodology`
 
-For each company:
+The public company payload should include only the fields allowed by the publication model:
 
 * ticker
 * company name
 * factor scores
 * aggregate score if displayed
 * sizing output
-* public comment if enabled
+* public comment when enabled
 * published timestamp
 
-#### `GET /api/public/companies/:ticker`
+### 10.2 Admin API
 
-Returns detail for one published company.
+The admin API requires authentication and authorization.
 
-#### `GET /api/public/methodology`
-
-Returns public methodology text/config.
-
-Because there is no auth, these endpoints must never return draft or internal fields.
-
----
-
-## 12. Admin API spec
-
-The admin API must require authorization.
-
-### Auth endpoints
+Auth endpoints:
 
 * `POST /api/admin/auth/login`
 * `POST /api/admin/auth/logout`
 * `GET /api/admin/auth/me`
 
-### Company/admin endpoints
+Company endpoints:
 
 * `GET /api/admin/companies`
 * `GET /api/admin/companies/:ticker`
@@ -500,64 +437,79 @@ The admin API must require authorization.
 * `POST /api/admin/companies/:ticker/publish`
 * `GET /api/admin/companies/:ticker/history`
 
-### Assessment endpoints
+Assessment endpoints:
 
 * `GET /api/admin/assessments/:id`
 * `POST /api/admin/companies/:ticker/drafts`
 * `PATCH /api/admin/assessments/:id`
 * `POST /api/admin/assessments/:id/recalculate`
 
-### Evidence endpoints
+Evidence endpoints:
 
 * `GET /api/admin/companies/:ticker/evidence`
 * `GET /api/admin/companies/:ticker/evidence/emails`
 * `GET /api/admin/companies/:ticker/evidence/forum-posts`
 
-### Internal workflow endpoints later
+Optional internal workflow endpoints later:
 
 * `POST /api/admin/companies/:ticker/run-ingestion`
 * `POST /api/admin/companies/:ticker/run-llm-draft`
 
-These can be deferred if ingestion stays script-driven.
-
 ---
 
-## 13. Authorization requirements
+## 11. Auth, backend, and transaction requirements
 
-Scott’s admin interaction with the DB must be authorized through the backend, not through direct browser DB access.
+### 11.1 Authorization model
 
-### Requirements
-
-* admin UI must require authentication
-* backend must verify admin identity before any mutation
-* public API and admin API must be fully separated by route/middleware
+* the admin UI must require authentication
+* the backend must authorize every admin read and mutation
+* public and admin routes must be separated by route structure and middleware
 * database credentials must never be exposed to the browser
-* only backend/service accounts may write to the database
-* all admin mutations should be audited
+* only backend or service accounts may write to the database
+* admin mutations should be audited
 
-### Recommended model
+Even if PM is the only admin initially, use backend-enforced roles so the model remains extensible.
 
-* session cookie or token-based auth for admin UI
-* role-based access control, even if there is only one admin initially
-* backend-enforced authorization on every admin endpoint
+### 11.2 Backend responsibilities
+
+The backend service should:
+
+* serve public read-only endpoints
+* serve authenticated admin endpoints
+* validate and authorize admin actions
+* persist company, factor, evidence, and assessment data
+* expose clean published snapshots for the public app
+* manage versioning and publish transitions
+* optionally host calculation logic directly
+
+### 11.3 Publish transaction behavior
+
+Publishing a draft should be an atomic transaction:
+
+1. validate draft completeness
+2. calculate or verify aggregate and sizing outputs
+3. archive the current published version for that company
+4. mark the new version as published
+5. update company public state if needed
+6. record audit and publish events
+
+This guarantees that only one published assessment exists at a time.
 
 ---
 
-## 14. Frontend spec
+## 12. Frontend requirements
 
-## 14.1 Public frontend
+### 12.1 Public frontend
 
-React frontend for public viewing.
-
-Pages:
+Public routes:
 
 * `/`
 * `/company/:ticker`
 * `/methodology`
 
-Components:
+Core UI elements:
 
-* company table/cards
+* company table or cards
 * factor score display
 * sizing display
 * optional comment panel
@@ -566,16 +518,15 @@ Components:
 Characteristics:
 
 * read-only
-* simple
-* fast
-* cacheable
+* simple and fast
+* cache-friendly
 * no login flows
 
-## 14.2 Admin frontend
+### 12.2 Admin frontend
 
-Separate admin React app or an `/admin` section.
+Use either a separate admin app or an `/admin` section.
 
-Pages:
+Admin routes:
 
 * `/admin/login`
 * `/admin`
@@ -583,136 +534,43 @@ Pages:
 * `/admin/company/:ticker`
 * `/admin/company/:ticker/history`
 
-Components:
+Core UI elements:
 
 * company admin table
 * assessment editor form
 * factor editor
-* publish action controls
+* publish controls
 * evidence viewer
-* history/version comparison
+* history or version comparison view
 
-This should be optimized for Scott’s workflow, not for public presentation.
-
----
-
-## 15. Backend spec
-
-## 15.1 Rust backend responsibilities
-
-The Rust service should:
-
-* serve public read-only endpoints
-* serve authenticated admin endpoints
-* validate and authorize admin actions
-* persist company and assessment data
-* expose published snapshots cleanly
-* handle versioning and publish transitions
-* optionally host calculation logic
-
-## 15.2 Publish transaction behavior
-
-Publishing a company assessment should be an atomic transaction:
-
-1. validate draft completeness
-2. calculate aggregate/sizing outputs
-3. archive previous published version for that company
-4. mark new version as published
-5. update company public state
-6. record audit/publish event
-
-This ensures only one published version exists at a time.
+The admin UI should optimize for PM’s review and publishing workflow rather than public presentation.
 
 ---
 
-## 16. Versioning rules
+## 13. Pipeline integration
 
-Since Scott wants one current published assessment plus historical tracking:
+Existing Python extraction scripts fit into the internal pipeline:
 
-### Rules
+* Outlook extraction populates admin-only source records
+* forum extraction populates admin-only source records
+* a normalization step should write structured records into the main database or another import format the backend can consume
+* LLM-generated first-pass drafts can be stored for review, but remain internal
 
-* every meaningful edit should update the current draft
-* publish creates or finalizes a versioned assessment record
-* previous published versions become archived, not deleted
-* public UI always reads the latest published version only
-* admin UI can access all versions
-
-### Recommended version semantics
-
-For each company:
-
-* version 1, 2, 3, etc.
-* exactly one `published`
-* zero or more `archived`
-* optionally one active `draft`
+If ingestion remains script-driven in v1, workflow endpoints for ingestion and draft generation can be deferred.
 
 ---
 
-## 17. Update cadence
-
-Updates are ad hoc, so the system should not assume a fixed publishing schedule.
-
-Implications:
-
-* public UI should always show “last updated” or “as of” date
-* no need for cron-driven client refresh assumptions
-* admin UI should support manual publish timing
-* ingestion can remain on-demand or semi-manual initially
-
----
-
-## 18. Calculation and display rules
-
-The sizing logic remains deterministic and internal.
-
-### Publicly visible
-
-* final factor scores
-* final sizing output
-* optional final comment
-* last updated date
-
-### Admin/internal only
-
-* calculation details if needed
-* intermediate normalized values
-* evidence backing
-* LLM-generated rationale
-* internal rationale per factor
-
-This matches the requirement that only final human-approved reasoning should appear externally.
-
----
-
-## 19. Implications for the existing Python scripts
-
-Your current Python extraction scripts fit naturally into the internal pipeline.
-
-### Outlook extractor
-
-Continue using it to populate internal source records. The resulting emails should remain admin-only and never be shown publicly.
-
-### Forum extractor
-
-Continue using it to populate internal source records. Forum posts also remain admin-only unless Scott later chooses to surface derived comments based on them.
-
-### Normalization step
-
-Add a post-processing step that writes normalized records into the cloud database or into an import format consumed by the admin backend.
-
----
-
-## 20. Recommended v1 scope
+## 14. Recommended v1 scope
 
 ### Public app
 
-* public dashboard
-* company detail pages
+* dashboard
+* company detail page
 * methodology page
-* factor scores
+* factor score display
 * sizing display
 * optional final comment
-* no auth
+* no authentication
 
 ### Admin app
 
@@ -720,39 +578,37 @@ Add a post-processing step that writes normalized records into the cloud databas
 * company list
 * assessment editor
 * factor editing
-* public comment toggle/edit
+* public comment toggle and editor
 * evidence viewer
 * publish flow
 * version history
 
 ### Internal pipeline
 
-* continue Python ingestion
+* continue Python-based ingestion
 * normalize source records
 * optionally store LLM first-pass drafts
-* write to DB for admin review
+* write draft-ready data to the main database
 
 ---
 
-## 21. Key open implementation decisions
+## 15. Open implementation decisions
 
 Still worth deciding next:
 
-* whether admin UI is a separate app or `/admin` section of same app
-* whether public comment is plain text only or supports rich text
-* whether publish requires explicit confirmation and preview
-* whether calculation inputs besides factors are editable in admin
-* whether evidence viewer should support search/filter by source/date
-* whether admin wants side-by-side version diff view
+* whether the admin UI is a separate app or an `/admin` section of the main app
+* whether the public comment supports plain text only or rich text
+* whether publish requires an explicit confirmation and preview step
+* whether any non-factor sizing inputs are manually editable in admin
+* whether the evidence viewer needs search or filtering by source and date
+* whether version comparison should be side-by-side or change-log based
 
----
+### Recommended next spec pass
 
-## 22. Recommended next step
+The next useful document would be an implementation spec with:
 
-The next useful pass is an **implementation spec** with:
-
-* concrete SQL schema
+* concrete SQL schema and constraints
 * Rust endpoint contracts
-* admin/public page map
-* publish-state machine
-* wireframe-level UI outline for Scott’s admin workflow
+* admin and public page map
+* publish state machine
+* wireframe-level admin workflow

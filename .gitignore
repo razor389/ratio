@@ -1,0 +1,12 @@
+# Python
+*.pyc
+__pycache__/
+python/venv/
+
+# Beads database
+.beads/
+
+# Misc
+repomix-output.xml
+AGENTS.md
+.gitattributes
