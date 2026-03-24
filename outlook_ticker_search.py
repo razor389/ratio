@@ -24,7 +24,7 @@ load_dotenv()
 
 # Get sender email from environment variables
 SENDER_EMAIL = os.getenv("SENDER_EMAIL")
-EXCLUDED_EMAIL = "derekr@academycapitalmgmt.com".lower()
+EXCLUDED_EMAIL = (os.getenv("EXCLUDED_EMAIL") or "").strip().lower()
 
 if not SENDER_EMAIL:
     logging.error("SENDER_EMAIL not found in .env file")
@@ -164,6 +164,9 @@ def email_contains_excluded_address(message, excluded_email: str) -> bool:
     IMPORTANT: This is best-effort. If anything goes wrong, we FAIL OPEN (return False),
     so we don't accidentally exclude everything.
     """
+    if not excluded_email:
+        return False
+
     try:
         fields: List[str] = []
 

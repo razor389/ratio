@@ -12,6 +12,7 @@ from collections import Counter
 load_dotenv()
 
 WEBSITETOOLBOX_API_KEY = os.getenv("WEBSITETOOLBOX_API_KEY")
+FORUM_AUTHOR_EMAIL = (os.getenv("FORUM_AUTHOR_EMAIL") or "").strip().lower()
 
 BASE_URL = "https://api.websitetoolbox.com/v1/api"
 
@@ -22,9 +23,6 @@ HEADERS = {
 
 MAX_RETRIES = 3
 PAGE_SIZE = 100
-
-SCOTT_EMAIL = "smgacm@gmail.com"
-
 
 # ---------------------------
 # Low-level helpers
@@ -207,12 +205,15 @@ def get_search_ticker(input_ticker, config):
 
 def fetch_moat_threat_source_for_ticker(
     input_ticker,
-    author_email=SCOTT_EMAIL,
+    author_email=FORUM_AUTHOR_EMAIL,
     *,
     include_descendants=True,     # search topics in each moat subcat's subtree
     require_author=True,          # if False, do not filter by author
     debug=False                   # print under-the-hood stats
 ):
+    if require_author and not author_email:
+        raise ValueError("FORUM_AUTHOR_EMAIL is required when author filtering is enabled")
+
     config = load_ticker_config()
     ticker = get_search_ticker(input_ticker, config)
 
@@ -453,7 +454,7 @@ def _print_cli_usage():
         "  python forum_posts.py TICKER --all\n"
         "\nMoat options:\n"
         "  --debug                 Print detailed counts and save output/{TICKER}_moat_threat_debug.json\n"
-        "  --author EMAIL          Override author email filter (default scott@academycapitalmgmt.com)\n"
+        "  --author EMAIL          Override author email filter (default FORUM_AUTHOR_EMAIL from .env)\n"
         "  --no-author-filter      Do not filter by author (show all authors)\n"
         "  --no-descendants        Only look for topics directly under each moat subcategory\n"
     )
@@ -476,7 +477,7 @@ if __name__ == "__main__":
     require_author = "--no-author-filter" not in sys.argv
     include_descendants = "--no-descendants" not in sys.argv
 
-    author_email = SCOTT_EMAIL
+    author_email = FORUM_AUTHOR_EMAIL
     if "--author" in sys.argv:
         try:
             author_email = sys.argv[sys.argv.index("--author") + 1]
@@ -484,6 +485,10 @@ if __name__ == "__main__":
             print("❌ Missing value after --author")
             _print_cli_usage()
             sys.exit(1)
+
+    if run_moat and require_author and not author_email:
+        print("❌ FORUM_AUTHOR_EMAIL is not set. Add it to .env or pass --author EMAIL.")
+        sys.exit(1)
 
     if run_old:
         fetch_all_for_ticker(input_ticker)

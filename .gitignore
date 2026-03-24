@@ -11,3 +11,6 @@ repomix-output.xml
 AGENTS.md
 .gitattributes
 target/
+.env
+.env.*
+!.env.example
