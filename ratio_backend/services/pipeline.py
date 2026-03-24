@@ -14,7 +14,7 @@ from typing import Any
 from ..core.config import get_settings
 from ..core.logging import get_logger
 from ..domain import AssessmentRecord, EvidenceItem, EvidenceSourceType
-from ..ingestion.forum_posts import collect_forum_posts_for_ticker, write_forum_posts_snapshot
+from ..ingestion.forum_posts import collect_forum_posts_for_ticker_async, write_forum_posts_snapshot
 from ..ingestion.outlook_ticker_search import filter_emails_by_config, write_outlook_email_snapshot
 from .drafting import DraftAssessmentInput, generate_assessment_draft_async
 
@@ -98,7 +98,7 @@ def _build_outlook_evidence_items(ticker: str, emails: list[dict[str, Any]]) -> 
     return items
 
 
-def collect_evidence_for_ticker(
+async def collect_evidence_for_ticker_async(
     ticker: str,
     *,
     include_forum: bool = True,
@@ -118,7 +118,7 @@ def collect_evidence_for_ticker(
         return []
 
     if include_forum:
-        forum_payload = collect_forum_posts_for_ticker(normalized_ticker)
+        forum_payload = await collect_forum_posts_for_ticker_async(normalized_ticker)
         if forum_payload:
             if persist_artifacts:
                 write_forum_posts_snapshot(forum_payload["ticker"], forum_payload)
@@ -130,10 +130,14 @@ def collect_evidence_for_ticker(
             )
 
     if include_outlook:
-        email_payload = filter_emails_by_config(normalized_ticker, lookback_years=lookback_years)
+        email_payload = await asyncio.to_thread(
+            filter_emails_by_config,
+            normalized_ticker,
+            lookback_years=lookback_years,
+        )
         if email_payload:
             if persist_artifacts:
-                write_outlook_email_snapshot(normalized_ticker, email_payload)
+                await asyncio.to_thread(write_outlook_email_snapshot, normalized_ticker, email_payload)
             email_items = _build_outlook_evidence_items(normalized_ticker, email_payload)
             evidence_items.extend(email_items)
             logger.info(
@@ -142,6 +146,26 @@ def collect_evidence_for_ticker(
             )
 
     return evidence_items
+
+
+def collect_evidence_for_ticker(
+    ticker: str,
+    *,
+    include_forum: bool = True,
+    include_outlook: bool = True,
+    lookback_years: int = 15,
+    persist_artifacts: bool = True,
+) -> list[EvidenceItem]:
+    """Synchronously collect all configured evidence sources for a ticker."""
+    return asyncio.run(
+        collect_evidence_for_ticker_async(
+            ticker,
+            include_forum=include_forum,
+            include_outlook=include_outlook,
+            lookback_years=lookback_years,
+            persist_artifacts=persist_artifacts,
+        )
+    )
 
 
 async def _generate_draft_from_evidence_items_async(
@@ -177,7 +201,7 @@ async def generate_assessment_draft_for_ticker_async(
     model_name: str | None = None,
 ) -> AssessmentRecord:
     """Collect evidence for a ticker and generate an LLM-backed draft assessment."""
-    evidence_items = collect_evidence_for_ticker(
+    evidence_items = await collect_evidence_for_ticker_async(
         ticker,
         include_forum=include_forum,
         include_outlook=include_outlook,

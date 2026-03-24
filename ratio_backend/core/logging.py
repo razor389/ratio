@@ -90,6 +90,10 @@ def configure_logging(settings: Settings | None = None) -> None:
     root_logger.setLevel(active_settings.log_level)
     root_logger.addHandler(handler)
 
+    # Keep third-party transport libraries from flooding normal job output.
+    for logger_name in ("httpx", "httpcore", "google_genai", "google_genai.models"):
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
+
     _configured = True
 
 

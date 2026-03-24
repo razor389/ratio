@@ -4,6 +4,7 @@ __all__ = [
     "DraftAssessmentInput",
     "calculate_sizing",
     "collect_evidence_for_ticker",
+    "collect_evidence_for_ticker_async",
     "generate_assessment_draft",
     "generate_assessment_draft_async",
     "generate_assessment_draft_for_ticker",
@@ -25,11 +26,17 @@ def __getattr__(name: str):
             "generate_assessment_draft": generate_assessment_draft,
             "generate_assessment_draft_async": generate_assessment_draft_async,
         }[name]
-    if name in {"collect_evidence_for_ticker", "generate_assessment_draft_for_ticker", "generate_assessment_draft_for_ticker_async"}:
-        from .pipeline import collect_evidence_for_ticker, generate_assessment_draft_for_ticker, generate_assessment_draft_for_ticker_async
+    if name in {"collect_evidence_for_ticker", "collect_evidence_for_ticker_async", "generate_assessment_draft_for_ticker", "generate_assessment_draft_for_ticker_async"}:
+        from .pipeline import (
+            collect_evidence_for_ticker,
+            collect_evidence_for_ticker_async,
+            generate_assessment_draft_for_ticker,
+            generate_assessment_draft_for_ticker_async,
+        )
 
         return {
             "collect_evidence_for_ticker": collect_evidence_for_ticker,
+            "collect_evidence_for_ticker_async": collect_evidence_for_ticker_async,
             "generate_assessment_draft_for_ticker": generate_assessment_draft_for_ticker,
             "generate_assessment_draft_for_ticker_async": generate_assessment_draft_for_ticker_async,
         }[name]
