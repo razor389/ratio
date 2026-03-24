@@ -1,4 +1,4 @@
-# forum_posts.py
+"""Forum ingestion script for WebsiteToolbox-backed source collection."""
 
 import os
 import json

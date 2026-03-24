@@ -1,3 +1,5 @@
+"""Outlook ingestion script for collecting ticker-related sent emails."""
+
 import win32com.client
 import json
 import logging
