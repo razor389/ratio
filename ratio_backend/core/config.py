@@ -34,7 +34,6 @@ class Settings:
     output_dir: Path
     base_position_size: float
     benchmark_total_score: float
-    factor_score_max: int
     factor_count: int
     beta_floor: float
     max_position_size: float | None
@@ -58,7 +57,6 @@ def get_settings() -> Settings:
         output_dir=output_dir,
         base_position_size=float(os.getenv("BASE_POSITION_SIZE", "0.05")),
         benchmark_total_score=float(os.getenv("BENCHMARK_TOTAL_SCORE", "20")),
-        factor_score_max=int(os.getenv("FACTOR_SCORE_MAX", "10")),
         factor_count=int(os.getenv("FACTOR_COUNT", "4")),
         beta_floor=float(os.getenv("BETA_FLOOR", "0.25")),
         max_position_size=float(max_position) if max_position else None,

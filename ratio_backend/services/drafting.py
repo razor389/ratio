@@ -7,6 +7,7 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import datetime
+from textwrap import dedent
 from typing import Any
 
 from ..core.config import Settings, get_settings
@@ -17,7 +18,7 @@ from .sizing import calculate_sizing
 
 logger = get_logger(__name__)
 
-PROMPT_VERSION = "assessment-draft-v1"
+PROMPT_VERSION = "assessment-draft-v3"
 
 
 @dataclass(slots=True)
@@ -85,7 +86,7 @@ def _build_factor_assessments(payload: dict[str, Any], settings: Settings) -> tu
             factor_label="Debt",
             score=int((factor_payload.get("debt") or {}).get("score", 0)),
             score_min=0,
-            score_max=settings.factor_score_max,
+            score_max=10,
             internal_rationale=(factor_payload.get("debt") or {}).get("rationale"),
             sort_order=1,
         ),
@@ -94,7 +95,7 @@ def _build_factor_assessments(payload: dict[str, Any], settings: Settings) -> tu
             factor_label="Change in Market Share",
             score=int((factor_payload.get("market_share_change") or {}).get("score", 0)),
             score_min=0,
-            score_max=settings.factor_score_max,
+            score_max=10,
             internal_rationale=(factor_payload.get("market_share_change") or {}).get("rationale"),
             sort_order=2,
         ),
@@ -103,7 +104,7 @@ def _build_factor_assessments(payload: dict[str, Any], settings: Settings) -> tu
             factor_label="Change in Definition of Market",
             score=int((factor_payload.get("market_definition_change") or {}).get("score", 0)),
             score_min=0,
-            score_max=settings.factor_score_max,
+            score_max=10,
             internal_rationale=(factor_payload.get("market_definition_change") or {}).get("rationale"),
             sort_order=3,
         ),
@@ -112,7 +113,7 @@ def _build_factor_assessments(payload: dict[str, Any], settings: Settings) -> tu
             factor_label="Relative Valuation",
             score=int((factor_payload.get("relative_valuation") or {}).get("score", 0)),
             score_min=0,
-            score_max=settings.factor_score_max,
+            score_max=10,
             internal_rationale=(factor_payload.get("relative_valuation") or {}).get("rationale"),
             sort_order=4,
         ),
@@ -123,8 +124,125 @@ def _build_factor_assessments(payload: dict[str, Any], settings: Settings) -> tu
         market_definition_change=assessments[2].score,
         relative_valuation=assessments[3].score,
     )
-    scores.validate(max_score=settings.factor_score_max)
+    scores.validate()
     return scores, assessments
+
+
+def _build_system_prompt(settings: Settings) -> str:
+    """Build the system prompt from the documented factor and sizing methodology."""
+    max_total_score = 10 * settings.factor_count
+    benchmark_normalized_score = settings.benchmark_total_score / max_total_score
+    max_position_line = (
+        f"- max_position_size cap = {settings.max_position_size}"
+        if settings.max_position_size is not None
+        else "- max_position_size cap = none"
+    )
+
+    return dedent(
+        f"""
+        You are an expert financial analyst producing a first-pass internal assessment draft for Ratio.
+
+        Your job is to score one company on exactly four factors, explain the reasoning concisely,
+        and produce a draft set of calculations that match the Ratio sizing methodology.
+        This is an internal draft only. Human review determines the final published assessment.
+
+        METHODOLOGY OVERVIEW
+        - Each factor is scored from 0 to 10.
+        - Higher score means higher risk and a higher beta contribution.
+        - Lower score means lower risk and a lower beta contribution.
+        - The four factor scores are additive and all four are required.
+        - Use exactly these four factors:
+          1. debt
+          2. market_share_change
+          3. market_definition_change
+          4. relative_valuation
+        - The objective is not to predict a stock move directly. The objective is to translate
+          qualitative company risk into a consistent beta-like sizing input.
+
+        FACTOR SCORING GUIDANCE
+        - debt:
+          - low (0-3): strong balance sheet, low leverage, ample flexibility
+          - high (7-10): heavy leverage, refinancing risk, constrained flexibility
+          - what matters: leverage, maturity wall, interest burden, covenant pressure, liquidity
+        - market_share_change:
+          - low: stable or improving share
+          - high: declining share, competitive pressure, customer loss
+          - what matters: customer wins/losses, channel checks, pricing pressure, unit growth versus peers
+        - market_definition_change:
+          - low: stable market structure and value chain
+          - high: disruption, platform shift, value-chain change, structural market redefinition
+          - what matters: whether the company's category is being redefined by technology, regulation,
+            distribution shifts, or changing buyer behavior
+        - relative_valuation:
+          - low: inexpensive valuation, muted expectations, margin of safety
+          - high: expensive valuation, demanding expectations, limited room for disappointment
+          - what matters: valuation versus peers/history, quality of the multiple, and how much
+            future success appears already priced in
+
+        SCORING PHILOSOPHY
+        - A score near 0 means the factor contributes little risk.
+        - A score near 10 means the factor contributes substantial risk.
+        - Use the middle of the range for mixed evidence or ordinary risk.
+        - Reserve extreme scores for unusually clear evidence.
+        - When evidence is thin, avoid fake precision and explain the uncertainty in `assumptions`.
+
+        SIZING LOGIC CONTEXT
+        - total_score = debt + market_share_change + market_definition_change + relative_valuation
+        - max_total_score = {max_total_score}
+        - normalized_score = total_score / max_total_score
+        - benchmark_total_score = {settings.benchmark_total_score}
+        - benchmark_normalized_score = {benchmark_normalized_score:.2f}
+        - raw_beta = total_score / {settings.benchmark_total_score}
+        - custom_beta = max(raw_beta, {settings.beta_floor})
+        - base_position_size = {settings.base_position_size}
+        - suggested_position_size = base_position_size / custom_beta
+        {max_position_line}
+        - lower total score implies lower beta and a larger position
+        - higher total score implies higher beta and a smaller position
+        - benchmark interpretation: a total_score of {settings.benchmark_total_score} maps to custom_beta 1.0,
+          which corresponds to the base position size
+        - the system will recompute the calculations independently, so your main task is to choose
+          defensible scores and rationale that support the math
+
+        WORKED EXAMPLE
+        - Example factor scores: debt=4, market_share_change=6, market_definition_change=5, relative_valuation=3
+        - Example total_score = 18
+        - Example normalized_score = 18 / {max_total_score} = {18 / max_total_score:.3f}
+        - Example raw_beta = 18 / {settings.benchmark_total_score} = {18 / settings.benchmark_total_score:.3f}
+        - Example custom_beta = max({18 / settings.benchmark_total_score:.3f}, {settings.beta_floor}) = {max(18 / settings.benchmark_total_score, settings.beta_floor):.3f}
+        - Example suggested_position_size = {settings.base_position_size} / {max(18 / settings.benchmark_total_score, settings.beta_floor):.3f} = {settings.base_position_size / max(18 / settings.benchmark_total_score, settings.beta_floor):.4f}
+
+        ANALYST INSTRUCTIONS
+        - Ground scores in the supplied evidence.
+        - Weight more recent evidence more heavily, but keep durable structural evidence in mind.
+        - If evidence is mixed, acknowledge the tension in the rationale and choose the most defensible single score.
+        - Tie each rationale to concrete signals from the documents, not generic market commentary.
+        - If there is not enough evidence for a factor, say that explicitly in the rationale or assumptions.
+        - Do not fabricate company facts that are not supported or reasonably inferred from the documents.
+        - Do not return score ranges. Return one integer score per factor.
+        - Put missing information, uncertainty, or inference gaps into `assumptions`.
+        - Return only JSON and no surrounding commentary.
+
+        Return this shape:
+        {{
+          "factor_scores": {{
+            "debt": {{ "score": 0, "rationale": "..." }},
+            "market_share_change": {{ "score": 0, "rationale": "..." }},
+            "market_definition_change": {{ "score": 0, "rationale": "..." }},
+            "relative_valuation": {{ "score": 0, "rationale": "..." }}
+          }},
+          "calculations": {{
+            "total_score": 0,
+            "normalized_score": 0.0,
+            "custom_beta": 0.0,
+            "base_position_size": {settings.base_position_size},
+            "suggested_position_size": 0.0
+          }},
+          "assumptions": ["..."],
+          "confidence": "low|medium|high"
+        }}
+        """
+    ).strip()
 
 
 async def generate_assessment_draft_async(
@@ -137,33 +255,7 @@ async def generate_assessment_draft_async(
     active_settings = settings or get_settings()
     llm = get_provider()
     evidence_blob = _render_source_documents(draft_input.source_documents)
-
-    system_prompt = f"""You are an expert financial analyst producing a first-pass internal assessment draft for Ratio.
-
-Use the four-factor scoring method exactly as defined below:
-- debt
-- market_share_change
-- market_definition_change
-- relative_valuation
-
-Rules:
-- Each score must be an integer from 0 to {active_settings.factor_score_max}.
-- Higher score means higher risk.
-- Return only JSON.
-- The output is internal and should include concise factor rationale plus assumptions.
-- Do not fabricate evidence beyond reasonable inference from the supplied documents.
-
-Return this shape:
-{{
-  "factor_scores": {{
-    "debt": {{ "score": 0, "rationale": "..." }},
-    "market_share_change": {{ "score": 0, "rationale": "..." }},
-    "market_definition_change": {{ "score": 0, "rationale": "..." }},
-    "relative_valuation": {{ "score": 0, "rationale": "..." }}
-  }},
-  "assumptions": ["..."],
-  "confidence": "low|medium|high"
-}}"""
+    system_prompt = _build_system_prompt(active_settings)
 
     user_prompt = (
         f"Ticker: {draft_input.ticker}\n"

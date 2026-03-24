@@ -31,7 +31,6 @@ pub struct DatabaseSettings {
 
 #[derive(Debug, Clone)]
 pub struct MethodologySettings {
-    pub factor_score_max: i32,
     pub factor_count: i32,
     pub benchmark_total_score: f64,
     pub base_position_size: f64,
@@ -101,9 +100,6 @@ impl Settings {
             server: ServerSettings { host, port },
             database: DatabaseSettings { url: database_url },
             methodology: MethodologySettings {
-                factor_score_max: env_string("FACTOR_SCORE_MAX", "10")
-                    .parse()
-                    .context("FACTOR_SCORE_MAX must be an integer")?,
                 factor_count: env_string("FACTOR_COUNT", "4")
                     .parse()
                     .context("FACTOR_COUNT must be an integer")?,
